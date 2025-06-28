@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 
     uint16_t port = std::stoi(argv[2]);
 
-    NTPClient client{argv[1], port};
+    ntp::NTPClient client{argv[1], port};
 
     auto epoch_server_ms = client.request_time();
 
