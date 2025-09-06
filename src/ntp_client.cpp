@@ -193,7 +193,7 @@ NTPClient::~NTPClient()
 
 std::uint64_t NTPClient::request_time()
 {
-    int response = 0;  // return result from writing/reading from the socket
+    std::size_t response = 0;  // return result from writing/reading from the socket
 
     if (!build_connection()) {
         return 0;
