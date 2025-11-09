@@ -215,7 +215,7 @@ std::uint64_t NTPClient::request_time() {
     std::memset(&packet, 0, sizeof(packet));
     packet.li_vn_mode = 0x1b; // LI=0, VN=3, Mode=3 (client)
 
-    ssize_t response = send(socket_fd, reinterpret_cast<const char *>(&packet), sizeof(packet), 0);
+    int response = send(socket_fd, reinterpret_cast<const char *>(&packet), sizeof(packet), 0);
     if (response < 0) {
         std::cerr << "Send failed: " << errno << std::endl;
         close_socket();
@@ -223,7 +223,7 @@ std::uint64_t NTPClient::request_time() {
     }
 
     response = recv(socket_fd, reinterpret_cast<char *>(&packet), sizeof(packet), 0);
-    if (response < static_cast<ssize_t>(sizeof(packet))) {
+    if (response < static_cast<int>(sizeof(packet))) {
         std::cerr << "Recv failed, received " << response << " bytes, expected "
                 << sizeof(packet) << std::endl;
         close_socket();
@@ -233,7 +233,7 @@ std::uint64_t NTPClient::request_time() {
     packet.transmitted_timestamp_sec = ntohl(packet.transmitted_timestamp_sec);
 
     constexpr std::uint64_t NTP_TO_UNIX_EPOCH = 2208988800ULL;
-    std::uint64_t ntp_seconds = packet.transmitted_timestamp_sec;
+    const std::uint64_t ntp_seconds = packet.transmitted_timestamp_sec;
 
     std::cout << "Debug: NTP seconds raw: " << ntp_seconds << std::endl;
 
