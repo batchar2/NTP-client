@@ -8,21 +8,27 @@ include_directories(include)
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES})
 
-add_executable(ntp_example main.cpp)
-target_link_libraries(ntp_example ${PROJECT_NAME})
+add_definitions(-DNDEBUG -DO3)
 
-if (WIN32)
-    target_link_libraries(${PROJECT_NAME} ws2_32)
+if(IOS)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 17.0)
+    set(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE NO)
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+            "-framework Foundation"
+            "-framework Network")
+else()
+    add_executable(ntp_example main.cpp)
+    target_link_libraries(ntp_example ${PROJECT_NAME})
+    if(WIN32)
+        target_link_libraries(${PROJECT_NAME} ws2_32)
+    endif()
+    install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION bin)
 endif()
 
-# Instalación
-INSTALL(TARGETS ${PROJECT_NAME}
-        LIBRARY
-        DESTINATION bin)
-
-install(DIRECTORY "include/"
-    DESTINATION "include"
-    FILES_MATCHING
-    PATTERN "*.h"
-    PATTERN "*.hpp"
-)
+install(
+        DIRECTORY "include/"
+        DESTINATION "include"
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp")
