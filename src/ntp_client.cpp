@@ -235,8 +235,6 @@ std::uint64_t NTPClient::request_time() {
     constexpr std::uint64_t NTP_TO_UNIX_EPOCH = 2208988800ULL;
     const std::uint64_t ntp_seconds = packet.transmitted_timestamp_sec;
 
-    std::cout << "Debug: NTP seconds raw: " << ntp_seconds << std::endl;
-
     if (ntp_seconds == 0 || ntp_seconds < NTP_TO_UNIX_EPOCH) {
         std::cerr << "Invalid NTP time: " << ntp_seconds << std::endl;
         close_socket();
