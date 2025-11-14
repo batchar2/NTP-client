@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.12)
+
 project(ntp_client)
 
 set(CMAKE_CXX_STANDARD 14)
@@ -10,21 +11,21 @@ add_library(${PROJECT_NAME} STATIC ${SOURCES})
 
 add_definitions(-DNDEBUG -DO3)
 
-if(IOS)
+if (IOS)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 17.0)
     set(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE NO)
 
     target_link_libraries(${PROJECT_NAME} PRIVATE
             "-framework Foundation"
             "-framework Network")
-else()
+else ()
     add_executable(ntp_example main.cpp)
     target_link_libraries(ntp_example ${PROJECT_NAME})
-    if(WIN32)
+    if (WIN32)
         target_link_libraries(${PROJECT_NAME} ws2_32)
-    endif()
+    endif ()
     install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION bin)
-endif()
+endif ()
 
 install(
         DIRECTORY "include/"
