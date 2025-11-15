@@ -80,7 +80,8 @@ namespace {
 
     std::string resolve_hostname(const std::string &host) {
         static std::unordered_map<std::string, std::string> cache;
-        static std::mutex cache_mutex; {
+        static std::mutex cache_mutex;
+        {
             // check cache
             const std::lock_guard<std::mutex> lock(cache_mutex); // mutex
 
@@ -129,7 +130,7 @@ namespace {
         });
         thread.detach();
 
-        constexpr auto timeout = std::chrono::seconds(5);
+        constexpr auto timeout = std::chrono::seconds(2);
         if (future.wait_for(timeout) == std::future_status::ready) {
             try {
                 return future.get();
@@ -149,8 +150,8 @@ NTPClient::NTPClient(std::string hostname, std::uint16_t port)
       socket_fd(-1),
       socket_client{} {
 #ifdef _WIN32
-  WSADATA wsa = {};
-  (void)WSAStartup(MAKEWORD(2, 2), &wsa);
+    WSADATA wsa = {};
+    (void) WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
 }
 
@@ -162,19 +163,27 @@ bool NTPClient::build_connection() {
     if (socket_fd < 0) {
         return false;
     }
-
-    // Set timeout
 #ifdef _WIN32
-  const DWORD timeout_ms = 5000;
-  if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO,
-          reinterpret_cast<const char*>(&timeout_ms), sizeof(timeout_ms)) < 0) {
-    return false;
-  }
+    const DWORD timeout_ms = 1000;
+    if (::setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO,
+                   reinterpret_cast<const char *>(&timeout_ms), sizeof(timeout_ms)) < 0) {
+        close_socket();
+        return false;
+    }
+    if (::setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO,
+                   reinterpret_cast<const char *>(&timeout_ms), sizeof(timeout_ms)) < 0) {
+        close_socket();
+        return false;
+    }
 #else
     struct timeval timeout = {};
-    timeout.tv_sec = 5; // set timeout in seconds
-    if (setsockopt(
-            socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+    timeout.tv_sec = 1;
+    if (::setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+        close_socket();
+        return false;
+    }
+    if (::setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
+        close_socket();
         return false;
     }
 #endif
@@ -182,32 +191,29 @@ bool NTPClient::build_connection() {
     // Filling server information
     const std::string ntp_server_ip = hostname_to_ip(hostname_);
     if (ntp_server_ip.empty()) {
+        close_socket();
         return false;
     }
+
     socket_client.sin_family = AF_INET;
     socket_client.sin_port = htons(port_);
     if (inet_pton(AF_INET, ntp_server_ip.c_str(), &socket_client.sin_addr) <= 0) {
+        close_socket();
         return false;
     }
+
     return true;
 }
 
 NTPClient::~NTPClient() {
     close_socket();
 #ifdef _WIN32
-  WSACleanup();
+    WSACleanup();
 #endif
 }
 
 std::uint64_t NTPClient::request_time() {
     if (!build_connection()) {
-        std::cerr << "Failed to build connection" << std::endl;
-        return 0;
-    }
-
-    if (connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_client),
-                sizeof(socket_client)) < 0) {
-        std::cerr << "Connect failed" << std::endl;
         return 0;
     }
 
@@ -215,17 +221,31 @@ std::uint64_t NTPClient::request_time() {
     std::memset(&packet, 0, sizeof(packet));
     packet.li_vn_mode = 0x1b; // LI=0, VN=3, Mode=3 (client)
 
-    int response = send(socket_fd, reinterpret_cast<const char *>(&packet), sizeof(packet), 0);
+    int response = ::sendto(socket_fd,
+                            reinterpret_cast<const char *>(&packet),
+                            sizeof(packet), 0,
+                            reinterpret_cast<struct sockaddr *>(&socket_client),
+                            sizeof(socket_client));
+
     if (response < 0) {
-        std::cerr << "Send failed: " << errno << std::endl;
         close_socket();
         return 0;
     }
 
-    response = recv(socket_fd, reinterpret_cast<char *>(&packet), sizeof(packet), 0);
+    sockaddr_in from_addr = {};
+    socklen_t from_len = sizeof(from_addr);
+
+    response = ::recvfrom(socket_fd,
+                          reinterpret_cast<char *>(&packet),
+                          sizeof(packet), 0,
+                          reinterpret_cast<struct sockaddr *>(&from_addr),
+                          &from_len);
     if (response < static_cast<int>(sizeof(packet))) {
-        std::cerr << "Recv failed, received " << response << " bytes, expected "
-                << sizeof(packet) << std::endl;
+        close_socket();
+        return 0;
+    }
+
+    if (socket_client.sin_addr.s_addr != from_addr.sin_addr.s_addr) {
         close_socket();
         return 0;
     }
@@ -236,13 +256,11 @@ std::uint64_t NTPClient::request_time() {
     const std::uint64_t ntp_seconds = packet.transmitted_timestamp_sec;
 
     if (ntp_seconds == 0 || ntp_seconds < NTP_TO_UNIX_EPOCH) {
-        std::cerr << "Invalid NTP time: " << ntp_seconds << std::endl;
         close_socket();
         return 0;
     }
-
-    std::uint64_t unix_seconds = ntp_seconds - NTP_TO_UNIX_EPOCH;
     close_socket();
+    const std::uint64_t unix_seconds = ntp_seconds - NTP_TO_UNIX_EPOCH;
     return unix_seconds * 1000;
 }
 
